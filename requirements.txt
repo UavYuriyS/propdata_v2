@@ -1,0 +1,8 @@
+stealth-requests
+scipy
+numpy
+tqdm
+dacite
+pyyaml
+strenum
+stealth-requests[parsers]
