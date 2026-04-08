@@ -20,6 +20,7 @@ from config import ConstraintEntry, ConstraintConfig, ConditionEntry
 from data_loader import DataLoader
 from interpolator import PropInterpolator
 from models import Prop, Columns
+from optimisator import optimize
 
 warnings.filterwarnings('ignore')
 
@@ -103,48 +104,14 @@ else:
     # outer list - one entry per prop
     # inner list - for a prop, one entry for a flight condition
     # tuple - prop object and output from the interpolator (dict of value_name: value)
-    results: list[list[tuple[Prop, dict[Columns | str, float]]]] = []
-    for prop in tqdm(data):
-        prop: Prop
-        constraints_met = True
-        res_for_condition = []
-        interp = PropInterpolator(prop, silent=True)
 
-        # Get the experiment results for this prop at all conditions
-        for condition in constraints.conditions:
-            prop_res = (prop, interp.evaluate_point(condition))
-
-            # Some props can't provide a certain values for the given Condition
-            # Set a flag to skip them
-            if prop_res[1] is None:
-                constraints_met = False
-                # Terminate early
-                break
-
-            # Constrain those fields
-            constraint_data = {
-                'rpm': prop_res[1]['rpm'],
-                'dia': prop_res[0].dia,
-                'power': prop_res[1][Columns.POWER],
-                'torque': prop_res[1][Columns.TORQUE]
-            }
-
-            # Set the flag to skip over all props that fail constraints
-            if constraints and not constraints.does_match(constraint_data):
-                constraints_met = False
-                # Terminate early
-                break
-            res_for_condition.append(prop_res)
-
-        # Skip over all props that fail constraints and can't provide thrust
-        if constraints_met:
-            results.append(res_for_condition)
-
+    results = optimize(constraints, data)
     def weight_efficiencies(prop_results: list[tuple[Prop, dict[Columns | str, float]]]) -> float:
         return sum([
-            prop_result[1][Columns.PROP_EFF]*cond.weight
+            prop_result[1][Columns.PROP_EFF] * cond.weight
             for prop_result, cond in zip(prop_results, constraints.conditions)
         ])
+
 
     # Calculate weighted efficiencies
     results_sorted = sorted(results, key=weight_efficiencies, reverse=True)
@@ -157,13 +124,19 @@ else:
               f"efficiency: {' '.join(['{:.4f}'.format(res[1][Columns.PROP_EFF]) for res in experiment])} \n\t"
               f"RPM: {' '.join(['{:.4f}'.format(res[1]['rpm']) for res in experiment])} \n\t"
               f"torque: {' '.join(['{:.4f}'.format(res[1][Columns.TORQUE]) for res in experiment])} \n\t"
-              f"power: {' '.join(['{:.4f}'.format(res[1][Columns.POWER]) for res in experiment])}")
+              f"power: {' '.join(['{:.4f}'.format(res[1][Columns.POWER]) for res in experiment])}\n\t"
+              f"thrust: {' '.join(['{:.4f}'.format(res[1][Columns.THRUST]) for res in experiment])}")
 
     # Get the data for best prop
+
+    if not results_sorted:
+        print("No props found matching the constraints")
+        exit(-1)
+
     best_prop = results_sorted[0]
     condition, (prop, result) = max(zip(constraints.conditions, best_prop), key=lambda x: x[0].weight)
-
     print(f'\n\nThe best propeller (values at condition {condition})):')
+
 
 print(f"Fetched and interpolated data for prop {prop.name}, source: {prop.link}")
 print(f"Prop dimensions: {prop.dia}x{prop.pitch}")
@@ -174,3 +147,4 @@ print(f"Power Coefficient (Cp): {result[Columns.POWER_COEFF]:.4f}")
 print(f"Prop efficiency: {result[Columns.PROP_EFF]:.4f}")
 print(f"Motor power: {result[Columns.POWER]:.4f}")
 print(f"Motor torque: {result[Columns.TORQUE]:.4f}")
+print(f"Motor thrust: {result[Columns.THRUST]:.4f}")

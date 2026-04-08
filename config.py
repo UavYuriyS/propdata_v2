@@ -13,6 +13,8 @@ from typing import Literal, Optional
 import dacite
 import yaml
 
+from models import Columns
+
 
 @dataclass
 class ConstraintEntry:
@@ -35,9 +37,11 @@ class ConstraintPoint:
 @dataclass
 class ConditionEntry:
     name: str
-    thrust: float
     airspeed: float
+    thrust: float = None
     weight: float = 1.0
+    input: Columns | Literal["rpm"] = None
+    input_value: float = None
 
 @dataclass
 class ConstraintConfig:
